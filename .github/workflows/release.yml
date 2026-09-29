@@ -10,6 +10,8 @@ jobs:
   release:
     name: Build & Release (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
