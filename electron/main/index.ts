@@ -22,6 +22,9 @@ function createWindow() {
     minHeight: 600,
     title: 'GitDrop',
     backgroundColor: '#0d1117',
+    icon: isDev
+      ? path.join(__dirname, '../../public/icon.png')
+      : path.join(__dirname, '../../dist/icon.png'),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,

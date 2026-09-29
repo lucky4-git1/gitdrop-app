@@ -8,6 +8,7 @@ files:
   - dist-electron/**/*
   - package.json
 win:
+  icon: build/icon.ico
   target:
     - nsis
     - portable
@@ -17,14 +18,17 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
+  license: LICENSE
 portable:
   artifactName: ${productName}-Portable-${version}.${ext}
 mac:
+  icon: build/icon.png
   target:
     - dmg
     - zip
   category: public.app-category.developer-tools
 linux:
+  icon: build/icons
   target:
     - AppImage
     - deb
