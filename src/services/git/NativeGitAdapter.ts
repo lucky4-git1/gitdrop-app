@@ -480,6 +480,12 @@ export class NativeGitAdapter implements GitService {
   }
 
   public async addRemote(name: string, url: string): Promise<void> {
+    const existing = await this.remotes().catch(() => []);
+    if (existing.some((r) => r.name === name)) {
+      const setUrlRes = await this.exec(['remote', 'set-url', name, url]);
+      if (setUrlRes.exitCode === 0) return;
+      await this.removeRemote(name).catch(() => {});
+    }
     const res = await this.exec(['remote', 'add', name, url]);
     if (res.exitCode !== 0) {
       throw new Error(`Failed to add remote: ${res.stderr || res.stdout}`);
@@ -493,12 +499,26 @@ export class NativeGitAdapter implements GitService {
     }
   }
 
+  private getAuthArgs(token?: string): string[] {
+    if (!token) return [];
+    // Git HTTP requires Basic Authentication: base64(x-access-token:token)
+    // -c credential.helper= ensures system credential helper does not conflict with user-provided token
+    const credentials = `x-access-token:${token}`;
+    const b64 = typeof btoa === 'function' ? btoa(credentials) : Buffer.from(credentials).toString('base64');
+    return [
+      '-c',
+      'credential.helper=',
+      '-c',
+      `http.extraHeader=AUTHORIZATION: Basic ${b64}`,
+    ];
+  }
+
   public async fetch(options?: { remote?: string; token?: string }): Promise<void> {
     const remote = options?.remote || 'origin';
     const args: string[] = [];
 
     if (options?.token) {
-      args.push('-c', `http.extraHeader=AUTHORIZATION: token ${options.token}`);
+      args.push(...this.getAuthArgs(options.token));
     }
     args.push('fetch', remote);
 
@@ -514,7 +534,7 @@ export class NativeGitAdapter implements GitService {
     const args: string[] = [];
 
     if (options?.token) {
-      args.push('-c', `http.extraHeader=AUTHORIZATION: token ${options.token}`);
+      args.push(...this.getAuthArgs(options.token));
     }
     args.push('pull', remote);
     if (branch) args.push(branch);
@@ -537,7 +557,7 @@ export class NativeGitAdapter implements GitService {
     const args: string[] = [];
 
     if (options?.token) {
-      args.push('-c', `http.extraHeader=AUTHORIZATION: token ${options.token}`);
+      args.push(...this.getAuthArgs(options.token));
     }
     args.push('push', '-u', remote, branch);
     if (options?.force) {
@@ -589,8 +609,12 @@ export class NativeGitAdapter implements GitService {
     await this.exec(['clean', '-fd', '--', ...paths]);
   }
 
-  public async clone(options: { url: string; dir?: string; depth?: number }): Promise<void> {
-    const args = ['clone', options.url];
+  public async clone(options: { url: string; dir?: string; depth?: number; token?: string }): Promise<void> {
+    const args: string[] = [];
+    if (options?.token) {
+      args.push(...this.getAuthArgs(options.token));
+    }
+    args.push('clone', options.url);
     if (options.depth) args.push('--depth', options.depth.toString());
     if (options.dir) args.push(options.dir);
 

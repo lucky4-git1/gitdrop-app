@@ -91,4 +91,44 @@ describe('NativeGitAdapter', () => {
     await adapter.deleteBranch('feature/desktop');
     expect(mockExec).toHaveBeenCalledWith(['branch', '-D', 'feature/desktop'], '/test/repo');
   });
+
+  it('passes HTTP Basic Auth header and bypasses credential helper during push', async () => {
+    const adapter = new NativeGitAdapter('/test/repo');
+    mockExec.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const token = 'ghp_test12345';
+    const expectedBase64 = Buffer.from(`x-access-token:${token}`).toString('base64');
+
+    await adapter.push({ remote: 'origin', branch: 'main', token });
+
+    expect(mockExec).toHaveBeenCalledWith(
+      [
+        '-c',
+        'credential.helper=',
+        '-c',
+        `http.extraHeader=AUTHORIZATION: Basic ${expectedBase64}`,
+        'push',
+        '-u',
+        'origin',
+        'main',
+      ],
+      '/test/repo'
+    );
+  });
+
+  it('updates existing remote URL when adding an already existing remote', async () => {
+    const adapter = new NativeGitAdapter('/test/repo');
+    // 1st mock: remotes() returns origin
+    mockExec.mockResolvedValueOnce({
+      stdout: 'origin\thttps://github.com/user/old.git (fetch)\norigin\thttps://github.com/user/old.git (push)\n',
+      stderr: '',
+      exitCode: 0,
+    });
+    // 2nd mock: remote set-url
+    mockExec.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 });
+
+    await adapter.addRemote('origin', 'https://github.com/user/new.git');
+
+    expect(mockExec).toHaveBeenCalledWith(['remote', 'set-url', 'origin', 'https://github.com/user/new.git'], '/test/repo');
+  });
 });

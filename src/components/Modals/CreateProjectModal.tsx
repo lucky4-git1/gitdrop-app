@@ -5,6 +5,8 @@ import { useConfig } from '@/state/ConfigContext';
 import { useUI } from '@/state/UIContext';
 import { FileSystemAccessFS } from '@/services/filesystem/FileSystemAccessFS';
 import { BrowserGitAdapter } from '@/services/git/BrowserGitAdapter';
+import { NativeFileSystemAdapter } from '@/services/filesystem/NativeFileSystemAdapter';
+import { NativeGitAdapter } from '@/services/git/NativeGitAdapter';
 import { PlusCircle, X, Loader2 } from 'lucide-react';
 import { Github } from '@/components/Icons/GithubIcon';
 
@@ -17,7 +19,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
   const { createRemoteRepo, isAuthenticated, getCredentialForGit } = useAuth();
   const { config } = useConfig();
   const { setActiveView } = useUI();
-  const { openVirtualProject, openDirectoryHandle } = useRepository();
+  const { openVirtualProject, openDirectoryHandle, openNativePath } = useRepository();
 
   const [projectName, setProjectName] = useState('my-new-project');
   const [template, setTemplate] = useState<'empty' | 'react-vite'>('react-vite');
@@ -37,60 +39,139 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, 
     setStatusText('Creating project files...');
 
     try {
-      if (storageType === 'local' && 'showDirectoryPicker' in window) {
-        setStatusText('Please select or create a folder on your computer...');
-        const handle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
-        const fs = new FileSystemAccessFS(handle);
-        const git = new BrowserGitAdapter(fs, '/');
-
-        // Write starter files
-        await fs.writeFile('README.md', `# ${projectName}\n\nManaged with GitDrop visual client.`);
-        await fs.writeFile('.gitignore', 'node_modules/\ndist/\n*.local\n');
-
-        if (template === 'react-vite') {
-          await fs.writeFile('package.json', JSON.stringify({
-            name: projectName,
-            private: true,
-            version: '0.0.0',
-            type: 'module',
-            dependencies: { react: '^19.0.0', 'react-dom': '^19.0.0' },
-          }, null, 2));
-        }
-
-        // Initialize git
-        setStatusText('Initializing Git repository...');
-        await git.init({
-          defaultBranch: config.defaultBranch || 'main',
-          user: { name: config.userName, email: config.userEmail },
-        });
-
-        // Stage & initial commit
-        await git.add(['README.md', '.gitignore', ...(template === 'react-vite' ? ['package.json'] : [])]);
-        await git.commit('Initial commit via GitDrop');
-
-        // Create on GitHub if selected
-        if (createOnGitHub && isAuthenticated) {
-          setStatusText(`Creating or connecting repository "${projectName}" on GitHub...`);
-          const ghRepo = await createRemoteRepo({
-            name: projectName,
-            private: isPrivate,
-          });
-          await git.addRemote('origin', ghRepo.cloneUrl);
-          setStatusText('Pushing initial commit to GitHub...');
-          const token = await getCredentialForGit();
-          try {
-            await git.push({
-              remote: 'origin',
-              branch: config.defaultBranch || 'main',
-              corsProxy: config.corsProxy,
-              token: token || undefined,
-            });
-          } catch (pushErr: any) {
-            alert(`Repository created on GitHub and locally, but initial push failed: ${pushErr.message}\n\nYou can click 'Push to Remote' in the workspace once ready.`);
+      if (storageType === 'local') {
+        if (typeof window !== 'undefined' && window.gitdrop?.isDesktop && window.gitdrop?.fs) {
+          setStatusText('Please select or create a folder on your computer...');
+          const selectedPath = await window.gitdrop.fs.selectDirectory();
+          if (!selectedPath) {
+            setIsCreating(false);
+            return;
           }
-        }
+          const fs = new NativeFileSystemAdapter(selectedPath);
+          const git = new NativeGitAdapter(selectedPath);
 
-        await openDirectoryHandle(handle);
+          // Write starter files
+          await fs.writeFile('README.md', `# ${projectName}\n\nManaged with GitDrop visual client.`);
+          await fs.writeFile('.gitignore', 'node_modules/\ndist/\n*.local\n');
+
+          if (template === 'react-vite') {
+            await fs.writeFile(
+              'package.json',
+              JSON.stringify(
+                {
+                  name: projectName,
+                  private: true,
+                  version: '0.0.0',
+                  type: 'module',
+                  dependencies: { react: '^19.0.0', 'react-dom': '^19.0.0' },
+                },
+                null,
+                2
+              )
+            );
+          }
+
+          // Initialize git
+          setStatusText('Initializing Git repository...');
+          await git.init({
+            defaultBranch: config.defaultBranch || 'main',
+            user: { name: config.userName, email: config.userEmail },
+          });
+
+          // Stage & initial commit
+          await git.add(['README.md', '.gitignore', ...(template === 'react-vite' ? ['package.json'] : [])]);
+          await git.commit('Initial commit via GitDrop');
+
+          // Create on GitHub if selected
+          if (createOnGitHub && isAuthenticated) {
+            setStatusText(`Creating or connecting repository "${projectName}" on GitHub...`);
+            const ghRepo = await createRemoteRepo({
+              name: projectName,
+              private: isPrivate,
+            });
+            await git.addRemote('origin', ghRepo.cloneUrl);
+            setStatusText('Pushing initial commit to GitHub...');
+            const token = await getCredentialForGit();
+            try {
+              await git.push({
+                remote: 'origin',
+                branch: config.defaultBranch || 'main',
+                token: token || undefined,
+              });
+            } catch (pushErr: any) {
+              alert(
+                `Repository created on GitHub and locally, but initial push failed: ${pushErr.message}\n\nYou can click 'Push to Remote' in the workspace once ready.`
+              );
+            }
+          }
+
+          await openNativePath(selectedPath);
+        } else if ('showDirectoryPicker' in window) {
+          setStatusText('Please select or create a folder on your computer...');
+          const handle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+          const fs = new FileSystemAccessFS(handle);
+          const git = new BrowserGitAdapter(fs, '/');
+
+          // Write starter files
+          await fs.writeFile('README.md', `# ${projectName}\n\nManaged with GitDrop visual client.`);
+          await fs.writeFile('.gitignore', 'node_modules/\ndist/\n*.local\n');
+
+          if (template === 'react-vite') {
+            await fs.writeFile(
+              'package.json',
+              JSON.stringify(
+                {
+                  name: projectName,
+                  private: true,
+                  version: '0.0.0',
+                  type: 'module',
+                  dependencies: { react: '^19.0.0', 'react-dom': '^19.0.0' },
+                },
+                null,
+                2
+              )
+            );
+          }
+
+          // Initialize git
+          setStatusText('Initializing Git repository...');
+          await git.init({
+            defaultBranch: config.defaultBranch || 'main',
+            user: { name: config.userName, email: config.userEmail },
+          });
+
+          // Stage & initial commit
+          await git.add(['README.md', '.gitignore', ...(template === 'react-vite' ? ['package.json'] : [])]);
+          await git.commit('Initial commit via GitDrop');
+
+          // Create on GitHub if selected
+          if (createOnGitHub && isAuthenticated) {
+            setStatusText(`Creating or connecting repository "${projectName}" on GitHub...`);
+            const ghRepo = await createRemoteRepo({
+              name: projectName,
+              private: isPrivate,
+            });
+            await git.addRemote('origin', ghRepo.cloneUrl);
+            setStatusText('Pushing initial commit to GitHub...');
+            const token = await getCredentialForGit();
+            try {
+              await git.push({
+                remote: 'origin',
+                branch: config.defaultBranch || 'main',
+                corsProxy: config.corsProxy,
+                token: token || undefined,
+              });
+            } catch (pushErr: any) {
+              alert(
+                `Repository created on GitHub and locally, but initial push failed: ${pushErr.message}\n\nYou can click 'Push to Remote' in the workspace once ready.`
+              );
+            }
+          }
+
+          await openDirectoryHandle(handle);
+        } else {
+          throw new Error('Local folder access is not supported in this browser. Please use Chrome/Edge or GitDrop Desktop.');
+        }
       } else {
         // Virtual In-Memory Workspace
         await openVirtualProject(projectName);
