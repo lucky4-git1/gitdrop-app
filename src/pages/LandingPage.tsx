@@ -133,7 +133,7 @@ export const LandingPage: React.FC = () => {
       >
         {/* Brand Header */}
         <div style={{ marginBottom: '28px' }}>
-          <img src="/gitdrop-icon.svg" alt="GitDrop" style={{ width: '48px', height: '48px', marginBottom: '14px', display: 'inline-block' }} />
+          <img src="./gitdrop-icon.svg" alt="GitDrop" style={{ width: '48px', height: '48px', marginBottom: '14px', display: 'inline-block' }} />
           <h1 style={{ fontSize: '26px', fontWeight: 700, margin: '0 0 6px 0', letterSpacing: '-0.5px' }}>
             GitDrop
           </h1>
