@@ -161,4 +161,39 @@ export class IndexedDBCredentialStore implements CredentialStore {
   }
 }
 
-export const credentialStore = new IndexedDBCredentialStore();
+import { DesktopCredentialStore } from './DesktopCredentialStore';
+
+export class DynamicCredentialStore implements CredentialStore {
+  private indexedDBStore = new IndexedDBCredentialStore();
+  private desktopStore = new DesktopCredentialStore();
+
+  public getStore(): CredentialStore {
+    if (typeof window !== 'undefined' && window.gitdrop?.isDesktop && window.gitdrop?.credentials) {
+      return this.desktopStore;
+    }
+    return this.indexedDBStore;
+  }
+
+  public async saveGitHubCredential(credential: GitHubCredential): Promise<void> {
+    return this.getStore().saveGitHubCredential(credential);
+  }
+
+  public async getGitHubCredential(): Promise<GitHubCredential | null> {
+    return this.getStore().getGitHubCredential();
+  }
+
+  public async removeGitHubCredential(): Promise<void> {
+    return this.getStore().removeGitHubCredential();
+  }
+
+  public async hasGitHubCredential(): Promise<boolean> {
+    return this.getStore().hasGitHubCredential();
+  }
+
+  public async checkAndMigrateLegacySession(): Promise<string | null> {
+    return this.indexedDBStore.checkAndMigrateLegacySession();
+  }
+}
+
+export const credentialStore = new DynamicCredentialStore();
+

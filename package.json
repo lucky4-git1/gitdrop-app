@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "dist-electron/main/index.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -10,13 +11,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "electron:compile": "tsc -p tsconfig.electron.json",
+    "electron:dev": "npm run electron:compile && electron .",
+    "electron:build": "npm run build && npm run electron:compile && electron-builder"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "bootstrap": "^5.3.3",
     "buffer": "^6.0.3",
     "dompurify": "^3.2.4",
+    "electron-updater": "^6.8.9",
     "isomorphic-git": "^1.29.0",
     "lucide-react": "^1.16.0",
     "marked": "^15.0.7",
@@ -33,11 +38,15 @@
     "@typescript-eslint/eslint-plugin": "^8.26.0",
     "@typescript-eslint/parser": "^8.26.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "jsdom": "^26.0.0",
     "typescript": "~5.7.3",
     "vite": "^6.2.0",
+    "vite-plugin-electron": "^1.1.2",
+    "vite-plugin-electron-renderer": "^1.0.0",
     "vitest": "^3.0.7"
   }
 }

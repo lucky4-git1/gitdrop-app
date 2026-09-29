@@ -91,10 +91,25 @@ export const Topbar: React.FC = () => {
             onClick={() => setActiveView('workspace')}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
           >
-            <img src="/gitdrop-icon.svg" alt="GitDrop" style={{ width: '22px', height: '22px' }} />
+            <img src="./gitdrop-icon.svg" alt="GitDrop" style={{ width: '22px', height: '22px' }} />
             <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>
               GitDrop
             </span>
+            {typeof window !== 'undefined' && window.gitdrop?.isDesktop && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  padding: '1px 5px',
+                  borderRadius: '4px',
+                  backgroundColor: 'var(--accent-subtle)',
+                  color: 'var(--accent-text)',
+                  fontWeight: 600,
+                  letterSpacing: '0.2px',
+                }}
+              >
+                DESKTOP
+              </span>
+            )}
           </div>
 
           <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border)' }} />

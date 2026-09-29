@@ -40,7 +40,7 @@ export interface ProjectEntry {
   path?: string;
   repositoryRoot?: string;
   remoteUrl?: string;
-  provider?: 'github' | 'gitlab' | 'bitbucket' | 'unknown';
+  provider?: 'github' | 'gitlab' | 'bitbucket' | 'local' | 'unknown';
   lastOpenedAt: string;
   addedAt: string;
   branch?: string;

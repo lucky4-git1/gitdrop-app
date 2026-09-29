@@ -1,112 +1,131 @@
-# GitDrop — Production Visual Git Client
+# GitDrop Desktop — Production Visual Git Client
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/gitdrop/gitdrop)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/lucky4-git1/gitdrop-app)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
+[![Electron](https://img.shields.io/badge/Electron-44.4-47848F.svg)](https://www.electronjs.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**GitDrop** is a production-quality, local-first visual Git client designed for developers who want a fast, beautiful, and reliable GUI to manage repositories without requiring a terminal.
+**GitDrop Desktop** is a production-quality, local-first visual Git client for Windows, macOS, and Linux. Built with React 19, TypeScript, Vite, and Electron, it combines a fast, modern GUI with the raw power and compatibility of your system's native `git` binary.
 
-GitDrop is **deterministic developer software**. It contains **no AI agents, no LLMs, and no fake simulations**. Every status badge, commit graph node, merge, diff, and remote operation is powered by a real Git engine and browser filesystem APIs.
-
----
-
-## Key Features
-
-- **Local-First & Zero-Cloud Private**: Your source code never leaves your computer unless explicitly pushed to your configured remote (e.g. GitHub).
-- **Directory Drag & Drop & Detection**: Drop any folder or project to automatically detect its framework (`React/Vite`, `Next.js`, `Rust`, `Go`, `Python`, `Node.js`, etc.) and `.git` status.
-- **Visual Staging & Monaco Diffing**:
-  - Individual and bulk staging (`Stage All`, `Unstage All`).
-  - Dangerous actions (e.g. `Discard Changes`) protected by explicit confirmation modals.
-  - Side-by-side split and inline unified diffs with syntax highlighting powered by Monaco Editor.
-- **Commit Management**:
-  - Commit message editor with keyboard shortcut (`Ctrl+Enter` / `Cmd+Enter`).
-  - Support for `amend` and one-click `Commit & Push`.
-- **Branch Management**:
-  - Branch listing, creation from any ref, switching, renaming, and deletion.
-  - Fast-forward and recursive branch merges with conflict detection.
-  - Interactive rebase onto target branches.
-- **3-Way Visual Conflict Resolver**:
-  - Highlights `HEAD` vs `Incoming` conflict chunks.
-  - One-click `Accept Current`, `Accept Incoming`, `Accept Both`, or manual editing with auto-staging upon resolution.
-- **DAG Visual Commit Graph**:
-  - Functional SVG DAG commit graph calculating topological lanes and bezier curves for branches and merges.
-  - Inspect commit author, date, tree, and parent references.
-  - Support for commit `Revert` and `Reset` (`soft`, `mixed`, `hard`).
-- **Stash & Tags**:
-  - Stash working directory and index state with custom messages.
-  - Create and push tags for releases (`v1.0.0`).
-- **Remotes & GitHub Sync**:
-  - One-click repository publishing to GitHub (create repo, set remote origin, stage, commit, push).
-  - Configurable remotes with fetch, pull, and push.
-  - Secure GitHub Personal Access Token authentication stored safely in browser session storage.
-- **Visual .gitignore Generator**:
-  - Presets across Node.js, React, Vite, Next.js, Python, Rust, Go, Java, Flutter, C/C++, VS Code, OS files, and more.
-- **File Explorer & Markdown Viewer**:
-  - Recursive directory tree navigation.
-  - In-place file editing and saving via Monaco Editor.
-  - Live sanitized Markdown README preview (`Edit`, `Preview`, `Split`).
-- **Command Palette & Global Search**:
-  - `Ctrl+K` / `Cmd+K`: Comprehensive searchable command palette.
-  - `Ctrl+P` / `Cmd+P`: Fast global search across files, branches, and commits.
-  - Collapsible bottom console for live Git engine command logging and diagnostics.
+GitDrop is **deterministic developer software**. It contains **no AI agents, no LLMs, and no fake simulations**. Every status badge, commit graph node, merge, diff, and remote operation is executed directly against your local filesystem and Git repositories.
 
 ---
 
-## Supported Browsers
+## Web vs Desktop Editions
 
-GitDrop utilizes the standard W3C [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) to read and write directly to your local filesystem.
-
-| Browser | Status | Notes |
+| Capability | Web Edition (`gitdrop-source`) | Desktop Edition (`gitdropapp-source`) |
 | :--- | :--- | :--- |
-| **Google Chrome** | Fully Supported | Full local filesystem read & write |
-| **Microsoft Edge** | Fully Supported | Full local filesystem read & write |
-| **Brave** | Fully Supported | Full local filesystem read & write |
-| **Chromium Variants** | Fully Supported | Full local filesystem read & write |
-| **In-Memory Virtual Mode** | All Modern Browsers | Allows testing full Git workflow in any browser |
+| **Filesystem Access** | Chromium File System Access API | Native OS Filesystem (`fs/promises`) |
+| **Git Engine** | In-browser `isomorphic-git` | Native system `git.exe` / `git` CLI |
+| **Performance** | WebAssembly / JS in-memory | Native process execution |
+| **Offline Operations** | 100% Offline (Local repos) | 100% Offline (Local repos) |
+| **Repository Size** | Limited by browser tab memory | Unlimited (Full system scale) |
+| **Credentials Storage** | IndexedDB / Session Storage | OS Keychain encryption (`safeStorage`) |
+| **Folder Selection** | Browser picker dialog | Native OS Directory Picker (`dialog.showOpenDialog`) |
+| **Drag & Drop** | Browser FileSystemEntry | Native OS folder drag & drop |
+| **OS Integration** | Browser Window | Native Application Menu, Window controls, Shortcuts |
+| **Auto-Updates** | Web refresh | GitHub Releases (`electron-updater`) |
 
 ---
 
-## Quickstart & Development
+## Core Desktop Architecture
 
-### 1. Prerequisites
-- **Node.js** >= 18.0.0
-- **npm** >= 9.0.0
+```
+d:/gitdropapp-source/
+├── electron/
+│   ├── main/
+│   │   ├── index.ts        # Main process entry (sandbox, isolation, lifecycle)
+│   │   └── menu.ts         # Native OS application menu & shortcuts
+│   ├── preload/
+│   │   └── index.ts        # Secure contextBridge gateway (window.gitdrop)
+│   ├── ipc/
+│   │   ├── git.ts          # Native git.exe execution gateway (vector args)
+│   │   ├── filesystem.ts   # Canonical filesystem operations & native picker
+│   │   ├── credentials.ts  # Electron safeStorage encryption gateway
+│   │   ├── settings.ts     # Local userData JSON store
+│   │   ├── updater.ts      # GitHub Releases auto-updater orchestration
+│   │   └── index.ts        # Central IPC registration
+│   └── types/
+│       └── index.ts        # Strictly-typed GitDropElectronAPI interface
+├── src/
+│   ├── services/
+│   │   ├── filesystem/
+│   │   │   └── NativeFileSystemAdapter.ts   # Implements IFileSystem via IPC
+│   │   ├── git/
+│   │   │   └── NativeGitAdapter.ts          # Implements GitService via git.exe
+│   │   └── security/
+│   │       └── DesktopCredentialStore.ts    # Implements CredentialStore via safeStorage
+│   └── state/
+│       └── RepositoryContext.tsx            # Seamless dual-mode desktop/web provider
+├── electron-builder.yml    # Windows (NSIS, portable), macOS (DMG), Linux (AppImage, deb)
+└── package.json
+```
 
-### 2. Setup
-```bash
-# Clone the repository
-git clone https://github.com/gitdrop/gitdrop.git
-cd gitdrop
+---
+
+## Security Model
+
+1. **Context Isolation**: `contextIsolation: true` is strictly enforced.
+2. **Node Integration**: `nodeIntegration: false` is permanently disabled in renderer.
+3. **Chromium Sandboxing**: `sandbox: true` is enforced for all renderer processes.
+4. **No Shell Injections**: Git commands execute through `child_process.spawn` passing strict argument array vectors (`args: string[]`). Shell evaluation (`shell: false`) is strictly disabled.
+5. **Encrypted Credentials**: GitHub Personal Access Tokens are encrypted using Electron's `safeStorage` API (Windows DPAPI, macOS Keychain, Linux Secret Service).
+6. **Navigation Restrictions**: Page navigation outside application origin is denied, and external web links (`http:`, `https:`) open in the user's default OS browser via `shell.openExternal`.
+
+---
+
+## Development & Building
+
+### Prerequisites
+- **Node.js**: v18.0.0 or later (v20+ recommended)
+- **Git**: Installed and available in your system `PATH` (`git --version`)
+
+### Quick Start
+
+```powershell
+# Clone and enter workspace
+cd d:\gitdropapp-source
 
 # Install dependencies
 npm install
-```
 
-### 3. Development Server
-```bash
+# Start Vite web dev server
 npm run dev
+
+# Compile Electron main and preload scripts
+npm run electron:compile
+
+# Launch Electron desktop application in dev mode
+npm run electron:dev
 ```
-Open [http://localhost:5173](http://localhost:5173) in Chrome or Edge.
 
-### 4. Quality Gate & Testing
-```bash
-# Typecheck TypeScript
+### Quality Assurance & Testing
+
+```powershell
+# TypeScript Typecheck (Renderer & Electron)
 npm run typecheck
+npm run electron:compile
 
-# Lint with ESLint 9
+# ESLint validation
 npm run lint
 
-# Run unit, integration, security, and UI tests
+# Vitest Unit and Integration Tests
 npm run test
 
-# Production build
+# Production Web Bundle
 npm run build
+
+# Package Native Desktop Executables (Windows NSIS & portable, macOS, Linux)
+npm run electron:build
 ```
 
 ---
 
-## GitHub Integration & CORS Proxy
+## Distribution & Releases
 
-GitHub's smart Git HTTP backend (`https://github.com/owner/repo.git/info/refs?service=git-upload-pack`) does not attach browser CORS headers by default. For browser-based push, fetch, and pull, GitDrop utilizes an isomorphic-git CORS proxy (defaulting to `https://cors.isomorphic-git.org` or a self-hosted proxy configured in **Settings**).
+Automatic packaging is configured via `electron-builder.yml` and `.github/workflows/release.yml`. When a release tag is pushed (e.g. `v1.0.0`), GitHub Actions will build:
+- **Windows**: `GitDrop-Setup-1.0.0.exe` (NSIS installer) & `GitDrop-1.0.0.exe` (Portable)
+- **macOS**: `GitDrop-1.0.0.dmg` & `GitDrop-1.0.0-mac.zip`
+- **Linux**: `GitDrop-1.0.0.AppImage` & `GitDrop-1.0.0.deb`
 
-For GitHub repository creation and listing, GitDrop communicates directly with the GitHub REST API (`https://api.github.com`).
+Updates are fetched automatically from GitHub Releases (`lucky4-git1/gitdrop-app`) through `electron-updater`.

@@ -21,6 +21,7 @@ interface RepositoryContextType {
   requestActivePermission: () => Promise<boolean>;
   openDirectoryPicker: () => Promise<void>;
   openDirectoryHandle: (handle: FileSystemDirectoryHandle, autoOpen?: boolean) => Promise<ProjectEntry>;
+  openNativePath: (folderPath: string, autoOpen?: boolean) => Promise<ProjectEntry>;
   openVirtualProject: (sampleName?: string) => Promise<void>;
   switchProject: (id: string) => Promise<void>;
   removeProject: (id: string) => Promise<void>;
@@ -182,7 +183,62 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [refreshProjectsList]
   );
 
+  const openNativePath = useCallback(
+    async (folderPath: string, autoOpen = true): Promise<ProjectEntry> => {
+      const cleanPath = folderPath.trim();
+      const folderName = cleanPath.split(/[/\\]/).filter(Boolean).pop() || 'Repository';
+      logger.info('app', `Registering native directory path: ${cleanPath}`);
+
+      const duplicate = await projectRegistry.findDuplicate(folderName, cleanPath);
+      let entry: ProjectEntry;
+      if (duplicate) {
+        entry = duplicate;
+      } else {
+        const all = await projectRegistry.listProjects();
+        let displayName = folderName;
+        let counter = 1;
+        while (all.some((p) => (p.displayName || p.name).toLowerCase() === displayName.toLowerCase())) {
+          counter++;
+          displayName = `${folderName} (${counter})`;
+        }
+
+        entry = await projectManager.addProject({
+          name: folderName,
+          displayName,
+          path: cleanPath,
+          provider: 'local',
+          isVirtual: false,
+          isDefault: false,
+        });
+      }
+
+      await refreshProjectsList();
+      if (autoOpen) {
+        await projectManager.openProject(entry.id);
+      }
+      return entry;
+    },
+    [refreshProjectsList]
+  );
+
   const openDirectoryPicker = useCallback(async () => {
+    // 1. Desktop native dialog
+    if (typeof window !== 'undefined' && window.gitdrop?.isDesktop && window.gitdrop?.fs) {
+      try {
+        const selected = await window.gitdrop.fs.selectDirectory();
+        if (!selected) {
+          logger.debug('app', 'User cancelled native folder selection');
+          return;
+        }
+        await openNativePath(selected, true);
+        return;
+      } catch (err: any) {
+        logger.error('app', 'Error selecting native directory', err?.message);
+        throw err;
+      }
+    }
+
+    // 2. Web browser FileSystemAccess API
     if (!('showDirectoryPicker' in window)) {
       throw new Error(
         'File System Access API is not supported in this browser. Please use Chrome, Edge, or Brave, or try a virtual repository.'
@@ -202,7 +258,17 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       logger.error('app', 'Error selecting directory', err.message);
       throw err;
     }
-  }, [openDirectoryHandle]);
+  }, [openDirectoryHandle, openNativePath]);
+
+  // Listen for native desktop menu open directory event
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.gitdrop?.onMenuOpenDirectory) {
+      const cleanup = window.gitdrop.onMenuOpenDirectory((dirpath: string) => {
+        openNativePath(dirpath, true);
+      });
+      return cleanup;
+    }
+  }, [openNativePath]);
 
   const openVirtualProject = useCallback(
     async (sampleName: string = 'react-vite-starter') => {
@@ -309,6 +375,7 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         requestActivePermission,
         openDirectoryPicker,
         openDirectoryHandle,
+        openNativePath,
         openVirtualProject,
         switchProject,
         removeProject,

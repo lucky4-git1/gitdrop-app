@@ -23,6 +23,7 @@ export const LandingPage: React.FC = () => {
   const {
     openDirectoryPicker,
     openDirectoryHandle,
+    openNativePath,
     openVirtualProject,
     projectInfo,
     activeProject,
@@ -56,6 +57,22 @@ export const LandingPage: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
+
+    // Desktop native drag-and-drop: Electron exposes file.path
+    if (typeof window !== 'undefined' && window.gitdrop?.isDesktop) {
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        const nativePath = (files[0] as any).path;
+        if (nativePath) {
+          try {
+            await openNativePath(nativePath, true);
+            return;
+          } catch (err: any) {
+            console.error('Failed to open dropped desktop folder:', err);
+          }
+        }
+      }
+    }
 
     const items = e.dataTransfer.items;
     if (!items || items.length === 0) return;

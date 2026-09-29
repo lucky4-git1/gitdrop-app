@@ -81,6 +81,6 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', '*.log'],
+    ignores: ['dist/**', 'dist-electron/**', 'release/**', 'node_modules/**', '*.log'],
   },
 ];

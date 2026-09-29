@@ -3,6 +3,8 @@ import { IFileSystem } from '@/types/filesystem';
 import { GitService } from '../git/IGitService';
 import { BrowserGitAdapter } from '../git/BrowserGitAdapter';
 import { FileSystemAccessFS } from '../filesystem/FileSystemAccessFS';
+import { NativeFileSystemAdapter } from '../filesystem/NativeFileSystemAdapter';
+import { NativeGitAdapter } from '../git/NativeGitAdapter';
 import { MemoryFS } from '../filesystem/MemoryFS';
 import { detectProject } from './projectDetector';
 import { ProjectRegistry, projectRegistry } from './ProjectRegistry';
@@ -127,7 +129,39 @@ export class ProjectManager implements IProjectManager {
         return;
       }
 
-      // 2. Physical Directory via FileSystemAccess API
+      // 2. Desktop Native Project (via native path)
+      if (typeof window !== 'undefined' && window.gitdrop?.isDesktop && entry.path) {
+        const fs = new NativeFileSystemAdapter(entry.path);
+        const git = new NativeGitAdapter(entry.path);
+        const info = await detectProject(fs, entry.name);
+
+        if (this.switchCounter !== currentSeq) {
+          logger.debug('app', `Discarding stale project switch (seq: ${currentSeq} < ${this.switchCounter})`);
+          return;
+        }
+
+        entry.lastOpenedAt = new Date().toISOString();
+        entry.needsPermission = false;
+        entry.framework = info.framework;
+        await this.registry.updateProject(id, {
+          lastOpenedAt: entry.lastOpenedAt,
+          needsPermission: false,
+          framework: info.framework,
+        });
+
+        this.activeState = {
+          project: entry,
+          fileSystem: fs,
+          gitService: git,
+          projectInfo: info,
+          needsPermission: false,
+        };
+        this.notify();
+        logger.info('app', `PROJECT_OPEN_SUCCESS: Opened desktop native project "${entry.name}" at ${entry.path}`);
+        return;
+      }
+
+      // 3. Web Physical Directory via FileSystemAccess API
       let handle: FileSystemDirectoryHandle | null = directHandle || null;
       if (!handle) {
         handle = await this.registry.getHandle(id);

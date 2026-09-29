@@ -155,6 +155,11 @@ export const StatusBar: React.FC = () => {
           </span>
         </div>
 
+        {/* Git Engine */}
+        <div style={{ color: 'var(--text-muted)' }}>
+          {typeof window !== 'undefined' && window.gitdrop?.isDesktop ? 'Native Git' : 'Web Git'}
+        </div>
+
         {/* Encoding */}
         <div style={{ color: 'var(--text-muted)' }}>UTF-8</div>
       </div>
