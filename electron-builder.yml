@@ -11,12 +11,14 @@ win:
   target:
     - nsis
     - portable
-  artifactName: ${productName}-Setup-${version}.${ext}
 nsis:
+  artifactName: ${productName}-Setup-${version}.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
+portable:
+  artifactName: ${productName}-Portable-${version}.${ext}
 mac:
   target:
     - dmg
