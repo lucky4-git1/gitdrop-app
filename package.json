@@ -1,5 +1,7 @@
 {
   "name": "gitdrop",
+  "description": "Visual Git Client for Desktop",
+  "author": "lucky4-git1",
   "private": true,
   "version": "1.0.0",
   "type": "module",
