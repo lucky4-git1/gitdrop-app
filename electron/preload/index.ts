@@ -1,10 +1,20 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { GitDropElectronAPI } from '../types';
 
 const api: GitDropElectronAPI = {
   isDesktop: true,
   platform: process.platform,
   appVersion: process.env.npm_package_version || '1.0.0',
+  getPathForFile: (file: File) => {
+    try {
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        return webUtils.getPathForFile(file);
+      }
+    } catch {
+      // fallback
+    }
+    return (file as any).path || '';
+  },
   git: {
     detect: () => ipcRenderer.invoke('git:detect'),
     exec: (args: string[], cwd: string) => ipcRenderer.invoke('git:exec', args, cwd),

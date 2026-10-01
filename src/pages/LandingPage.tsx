@@ -58,14 +58,24 @@ export const LandingPage: React.FC = () => {
     e.stopPropagation();
     setIsDragOver(false);
 
-    // Desktop native drag-and-drop: Electron exposes file.path
+    // 1. Desktop native drag-and-drop: Electron exposes file.path or webUtils.getPathForFile
     if (typeof window !== 'undefined' && window.gitdrop?.isDesktop) {
       const files = e.dataTransfer.files;
       if (files && files.length > 0) {
-        const nativePath = (files[0] as any).path;
-        if (nativePath) {
+        const file = files[0];
+        const rawPath = window.gitdrop.getPathForFile
+          ? window.gitdrop.getPathForFile(file)
+          : (file as any).path;
+
+        if (rawPath && window.gitdrop.fs) {
           try {
-            await openNativePath(nativePath, true);
+            const stat = await window.gitdrop.fs.stat(rawPath);
+            let dirPath = rawPath;
+            if (stat && !stat.isDirectory) {
+              dirPath = rawPath.replace(/[/\\][^/\\]+$/, '');
+            }
+            await openNativePath(dirPath, true);
+            setActiveView('workspace');
             return;
           } catch (err: any) {
             console.error('Failed to open dropped desktop folder:', err);
@@ -74,27 +84,25 @@ export const LandingPage: React.FC = () => {
       }
     }
 
+    // 2. Web File System Access API
     const items = e.dataTransfer.items;
-    if (!items || items.length === 0) return;
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      // File System Access API support for drag and drop
-      if ('getAsFileSystemHandle' in item) {
-        try {
-          const handle = await (item as any).getAsFileSystemHandle();
-          if (handle && handle.kind === 'directory') {
-            await openDirectoryHandle(handle as FileSystemDirectoryHandle);
-            return;
+    if (items && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if ('getAsFileSystemHandle' in item) {
+          try {
+            const handle = await (item as any).getAsFileSystemHandle();
+            if (handle && handle.kind === 'directory') {
+              await openDirectoryHandle(handle as FileSystemDirectoryHandle, true);
+              setActiveView('workspace');
+              return;
+            }
+          } catch {
+            // fallback
           }
-        } catch {
-          // fallback
         }
       }
     }
-
-    // Fallback info if dropped without directory handle permissions
-    alert('Please use the "Open Folder" button if your browser restricts directory drag-and-drop.');
   };
 
   const formatSize = (bytes: number): string => {

@@ -131,4 +131,24 @@ describe('NativeGitAdapter', () => {
 
     expect(mockExec).toHaveBeenCalledWith(['remote', 'set-url', 'origin', 'https://github.com/user/new.git'], '/test/repo');
   });
+
+  it('falls back to reading .git/config when git remote -v fails', async () => {
+    const adapter = new NativeGitAdapter('/test/repo');
+    // remote -v fails (e.g. exit code 128 / safe.directory issue)
+    mockExec.mockResolvedValueOnce({
+      stdout: '',
+      stderr: 'fatal: detected dubious ownership in repository',
+      exitCode: 128,
+    });
+
+    (window as any).gitdrop.fs = {
+      exists: vi.fn().mockResolvedValue(true),
+      readFile: vi.fn().mockResolvedValue('[remote "origin"]\n\turl = https://github.com/fallback/repo.git\n'),
+    };
+
+    const remotes = await adapter.remotes();
+    expect(remotes).toHaveLength(1);
+    expect(remotes[0].name).toBe('origin');
+    expect(remotes[0].url).toBe('https://github.com/fallback/repo.git');
+  });
 });

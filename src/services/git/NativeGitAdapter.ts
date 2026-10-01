@@ -13,6 +13,7 @@ import {
 } from '@/types/git';
 import { GitService } from './IGitService';
 import { logger } from '../logger/logger';
+import { parseGitConfigRemotes } from './BrowserGitAdapter';
 
 export class NativeGitAdapter implements GitService {
   private repoPath: string;
@@ -464,19 +465,39 @@ export class NativeGitAdapter implements GitService {
 
   public async remotes(): Promise<Remote[]> {
     const res = await this.exec(['remote', '-v']);
-    if (res.exitCode !== 0) return [];
+    if (res.exitCode === 0 && res.stdout.trim().length > 0) {
+      const map = new Map<string, string>();
+      const lines = res.stdout.split(/\r?\n/).filter(Boolean);
 
-    const map = new Map<string, string>();
-    const lines = res.stdout.split(/\r?\n/).filter(Boolean);
+      for (const line of lines) {
+        const parts = line.split(/\s+/);
+        if (parts.length >= 2) {
+          map.set(parts[0], parts[1]);
+        }
+      }
 
-    for (const line of lines) {
-      const parts = line.split(/\s+/);
-      if (parts.length >= 2) {
-        map.set(parts[0], parts[1]);
+      if (map.size > 0) {
+        return Array.from(map.entries()).map(([name, url]) => ({ name, url }));
       }
     }
 
-    return Array.from(map.entries()).map(([name, url]) => ({ name, url }));
+    // Direct fallback: read .git/config directly if git remote -v fails or returns empty
+    try {
+      if (typeof window !== 'undefined' && window.gitdrop?.fs) {
+        const separator = this.repoPath.includes('\\') ? '\\' : '/';
+        const configPath = `${this.repoPath}${separator}.git${separator}config`;
+        if (await window.gitdrop.fs.exists(configPath)) {
+          const content = await window.gitdrop.fs.readFile(configPath, 'utf8');
+          if (typeof content === 'string') {
+            return parseGitConfigRemotes(content);
+          }
+        }
+      }
+    } catch (err: any) {
+      logger.debug('git', `Fallback reading .git/config failed: ${err?.message}`);
+    }
+
+    return [];
   }
 
   public async addRemote(name: string, url: string): Promise<void> {
@@ -488,6 +509,9 @@ export class NativeGitAdapter implements GitService {
     }
     const res = await this.exec(['remote', 'add', name, url]);
     if (res.exitCode !== 0) {
+      // If remote already exists, try set-url fallback
+      const setUrlRes = await this.exec(['remote', 'set-url', name, url]);
+      if (setUrlRes.exitCode === 0) return;
       throw new Error(`Failed to add remote: ${res.stderr || res.stdout}`);
     }
   }

@@ -2,14 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useRepository } from '@/state/RepositoryContext';
 import { useUI } from '@/state/UIContext';
 import { FolderDown, HardDrive, Check, X } from 'lucide-react';
-import { ProjectEntry } from '@/types/project';
 
 export const GlobalDropOverlay: React.FC = () => {
-  const { openDirectoryHandle, switchProject } = useRepository();
+  const { openDirectoryHandle, openNativePath } = useRepository();
   const { setActiveView } = useUI();
 
   const [isDragOver, setIsDragOver] = useState(false);
-  const [detectedHandle, setDetectedHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [detectedProject, setDetectedProject] = useState<{
+    name: string;
+    path: string;
+    handle?: FileSystemDirectoryHandle;
+  } | null>(null);
   const [isPromptOpen, setIsPromptOpen] = useState(false);
 
   useEffect(() => {
@@ -17,7 +20,6 @@ export const GlobalDropOverlay: React.FC = () => {
 
     const handleDragEnter = (e: DragEvent) => {
       e.preventDefault();
-      // Only trigger if dragging external files/folders
       if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
         dragCounter++;
         setIsDragOver(true);
@@ -45,6 +47,34 @@ export const GlobalDropOverlay: React.FC = () => {
       dragCounter = 0;
       setIsDragOver(false);
 
+      // 1. Desktop native files
+      if (typeof window !== 'undefined' && window.gitdrop?.isDesktop && e.dataTransfer?.files?.length) {
+        const file = e.dataTransfer.files[0];
+        const rawPath = window.gitdrop.getPathForFile
+          ? window.gitdrop.getPathForFile(file)
+          : (file as any).path;
+
+        if (rawPath && window.gitdrop.fs) {
+          try {
+            const stat = await window.gitdrop.fs.stat(rawPath);
+            let dirPath = rawPath;
+            if (stat && !stat.isDirectory) {
+              dirPath = rawPath.replace(/[/\\][^/\\]+$/, '');
+            }
+            const folderName = dirPath.split(/[/\\]/).filter(Boolean).pop() || 'Repository';
+            setDetectedProject({
+              name: folderName,
+              path: dirPath,
+            });
+            setIsPromptOpen(true);
+            return;
+          } catch (err: any) {
+            console.error('Failed reading dropped native folder', err);
+          }
+        }
+      }
+
+      // 2. Web File System Access API
       const items = e.dataTransfer?.items;
       if (!items || items.length === 0) return;
 
@@ -54,7 +84,11 @@ export const GlobalDropOverlay: React.FC = () => {
           try {
             const handle = await (item as any).getAsFileSystemHandle();
             if (handle && handle.kind === 'directory') {
-              setDetectedHandle(handle as FileSystemDirectoryHandle);
+              setDetectedProject({
+                name: handle.name,
+                path: handle.name,
+                handle: handle as FileSystemDirectoryHandle,
+              });
               setIsPromptOpen(true);
               return;
             }
@@ -79,30 +113,37 @@ export const GlobalDropOverlay: React.FC = () => {
   }, []);
 
   const handleOpenProject = async () => {
-    if (!detectedHandle) return;
+    if (!detectedProject) return;
     try {
-      const entry: ProjectEntry = await openDirectoryHandle(detectedHandle, true);
-      await switchProject(entry.id);
+      if (detectedProject.handle) {
+        await openDirectoryHandle(detectedProject.handle, true);
+      } else if (openNativePath && detectedProject.path) {
+        await openNativePath(detectedProject.path, true);
+      }
       setActiveView('workspace');
     } finally {
       setIsPromptOpen(false);
-      setDetectedHandle(null);
+      setDetectedProject(null);
     }
   };
 
   const handleAddToProjects = async () => {
-    if (!detectedHandle) return;
+    if (!detectedProject) return;
     try {
-      await openDirectoryHandle(detectedHandle, false);
+      if (detectedProject.handle) {
+        await openDirectoryHandle(detectedProject.handle, false);
+      } else if (openNativePath && detectedProject.path) {
+        await openNativePath(detectedProject.path, false);
+      }
     } finally {
       setIsPromptOpen(false);
-      setDetectedHandle(null);
+      setDetectedProject(null);
     }
   };
 
   const handleCancel = () => {
     setIsPromptOpen(false);
-    setDetectedHandle(null);
+    setDetectedProject(null);
   };
 
   return (
@@ -144,7 +185,7 @@ export const GlobalDropOverlay: React.FC = () => {
       )}
 
       {/* New Project Detected Modal Dialog */}
-      {isPromptOpen && detectedHandle && (
+      {isPromptOpen && detectedProject && (
         <div className="modal-gitdrop-backdrop" onClick={handleCancel} role="dialog" aria-modal="true" style={{ zIndex: 10000 }}>
           <div className="modal-gitdrop" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
             <div className="modal-gitdrop-header">
@@ -169,10 +210,10 @@ export const GlobalDropOverlay: React.FC = () => {
               >
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Folder Name:</div>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px' }}>
-                  {detectedHandle.name}
+                  {detectedProject.name}
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Location: <code style={{ color: 'var(--accent-text)' }}>{detectedHandle.name}</code>
+                  Location: <code style={{ color: 'var(--accent-text)' }}>{detectedProject.path}</code>
                 </div>
               </div>
 

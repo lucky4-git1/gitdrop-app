@@ -34,6 +34,7 @@ export interface GitDropElectronAPI {
     quitAndInstall: () => Promise<void>;
   };
   onMenuOpenDirectory?: (callback: (dirpath: string) => void) => () => void;
+  getPathForFile?: (file: File) => string;
 }
 
 declare global {
