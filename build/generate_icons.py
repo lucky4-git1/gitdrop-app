@@ -57,7 +57,7 @@ def generate_icons():
     stroke_w = int(round(2.0 * s))
     
     nodes = [
-        {"cx": 16.0 * s, "cy": 14.0 * s, "fill": "#388bfd", "stroke": "#58a6ff"},
+        {"cx": 16.0 * s, "cy": 14.0 * s, "fill": "#f05032", "stroke": "#ff6b4a"},
         {"cx": 32.0 * s, "cy": 24.0 * s, "fill": "#3fb950", "stroke": "#56d364"},
         {"cx": 16.0 * s, "cy": 34.0 * s, "fill": "#a371f7", "stroke": "#bc8cff"},
     ]
