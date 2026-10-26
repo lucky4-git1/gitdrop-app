@@ -65,4 +65,23 @@ describe('Desktop Native Project Integration', () => {
     expect(activeState.gitService).toBeInstanceOf(NativeGitAdapter);
     expect(activeState.projectInfo?.framework).toBe('Node.js');
   });
+
+  it('relocates and grants access to desktop project when path confirmed', async () => {
+    mockFsApi.selectDirectory.mockResolvedValueOnce('D:/repos/RelocatedRepo');
+    const entry = await manager.addProject({
+      name: 'OldProject',
+      displayName: 'OldProject',
+      path: '',
+      provider: 'local',
+      isVirtual: false,
+      isDefault: false,
+    });
+
+    const success = await manager.requestPermission(entry.id);
+    expect(success).toBe(true);
+    const activeState = manager.getActiveState();
+    expect(activeState.project?.id).toBe(entry.id);
+    expect(activeState.project?.path).toBe('D:/repos/RelocatedRepo');
+    expect(activeState.needsPermission).toBe(false);
+  });
 });

@@ -129,35 +129,56 @@ export class ProjectManager implements IProjectManager {
         return;
       }
 
-      // 2. Desktop Native Project (via native path)
-      if (typeof window !== 'undefined' && window.gitdrop?.isDesktop && entry.path) {
-        const fs = new NativeFileSystemAdapter(entry.path);
-        const git = new NativeGitAdapter(entry.path);
-        const info = await detectProject(fs, entry.name);
+      // 2. Desktop Native Project
+      if (typeof window !== 'undefined' && window.gitdrop?.isDesktop) {
+        if (entry.path) {
+          try {
+            const fs = new NativeFileSystemAdapter(entry.path);
+            const git = new NativeGitAdapter(entry.path);
+            const info = await detectProject(fs, entry.name);
 
-        if (this.switchCounter !== currentSeq) {
-          logger.debug('app', `Discarding stale project switch (seq: ${currentSeq} < ${this.switchCounter})`);
-          return;
+            if (this.switchCounter !== currentSeq) {
+              logger.debug('app', `Discarding stale project switch (seq: ${currentSeq} < ${this.switchCounter})`);
+              return;
+            }
+
+            entry.lastOpenedAt = new Date().toISOString();
+            entry.needsPermission = false;
+            entry.framework = info.framework;
+            await this.registry.updateProject(id, {
+              lastOpenedAt: entry.lastOpenedAt,
+              needsPermission: false,
+              framework: info.framework,
+            });
+
+            this.activeState = {
+              project: entry,
+              fileSystem: fs,
+              gitService: git,
+              projectInfo: info,
+              needsPermission: false,
+            };
+            this.notify();
+            logger.info('app', `PROJECT_OPEN_SUCCESS: Opened desktop native project "${entry.name}" at ${entry.path}`);
+
+            // Refresh Git status summary for the project in background
+            this.refreshProjectGitStatus(id, git);
+            return;
+          } catch (err: any) {
+            logger.warn('app', `Failed to open desktop project path "${entry.path}": ${err?.message}`);
+          }
         }
 
-        entry.lastOpenedAt = new Date().toISOString();
-        entry.needsPermission = false;
-        entry.framework = info.framework;
-        await this.registry.updateProject(id, {
-          lastOpenedAt: entry.lastOpenedAt,
-          needsPermission: false,
-          framework: info.framework,
-        });
-
+        // If path is missing or inaccessible on disk, mark as needsPermission so user can locate/re-link it
+        logger.warn('app', `Desktop project "${entry.name}" requires path confirmation or relocation`);
         this.activeState = {
-          project: entry,
-          fileSystem: fs,
-          gitService: git,
-          projectInfo: info,
-          needsPermission: false,
+          project: { ...entry, needsPermission: true },
+          fileSystem: null,
+          gitService: null,
+          projectInfo: null,
+          needsPermission: true,
         };
         this.notify();
-        logger.info('app', `PROJECT_OPEN_SUCCESS: Opened desktop native project "${entry.name}" at ${entry.path}`);
         return;
       }
 
@@ -252,26 +273,89 @@ export class ProjectManager implements IProjectManager {
   }
 
   /**
-   * Prompts user for native permission on stored directory handle
+   * Prompts user for native permission on stored directory handle or relocates desktop folder
    */
   public async requestPermissionForActiveProject(): Promise<boolean> {
-    const active = this.activeState.project;
-    if (!active) return false;
+    return this.requestPermission();
+  }
 
-    const handle = await this.registry.getHandle(active.id);
-    if (!handle) return false;
+  public async requestPermission(projectId?: string): Promise<boolean> {
+    const isDesktop = typeof window !== 'undefined' && window.gitdrop?.isDesktop;
+    const target = projectId
+      ? await this.registry.getProject(projectId)
+      : this.activeState.project;
 
-    try {
-      if ('requestPermission' in handle) {
-        const res = await (handle as any).requestPermission({ mode: 'readwrite' });
-        if (res === 'granted') {
-          await this.setActiveProject(active.id);
-          return true;
+    if (!target) return false;
+
+    // 1. Desktop mode
+    if (isDesktop && window.gitdrop?.fs) {
+      if (target.path) {
+        try {
+          const exists = await window.gitdrop.fs.exists(target.path);
+          if (exists) {
+            target.needsPermission = false;
+            await this.registry.updateProject(target.id, { needsPermission: false });
+            await this.setActiveProject(target.id);
+            return true;
+          }
+        } catch {
+          // ignore
         }
       }
-    } catch (err: any) {
-      logger.error('app', 'Permission request failed', err?.message);
+
+      // Prompt native directory dialog to relocate folder
+      try {
+        const selected = await window.gitdrop.fs.selectDirectory();
+        if (selected) {
+          const folderName = selected.split(/[/\\]/).filter(Boolean).pop() || target.name;
+          target.path = selected;
+          target.name = target.name || folderName;
+          target.needsPermission = false;
+          await this.registry.updateProject(target.id, {
+            path: selected,
+            name: target.name,
+            needsPermission: false,
+          });
+          await this.setActiveProject(target.id);
+          return true;
+        }
+      } catch (err: any) {
+        logger.error('app', 'Desktop selectDirectory failed', err?.message);
+      }
+      return false;
     }
+
+    // 2. Web mode via File System Access API
+    let handle = await this.registry.getHandle(target.id);
+    if (handle && 'requestPermission' in handle) {
+      try {
+        const res = await (handle as any).requestPermission({ mode: 'readwrite' });
+        if (res === 'granted') {
+          target.needsPermission = false;
+          await this.registry.updateProject(target.id, { needsPermission: false });
+          await this.setActiveProject(target.id, handle);
+          return true;
+        }
+      } catch (err: any) {
+        logger.warn('app', 'Handle requestPermission failed, falling back to directory picker', err?.message);
+      }
+    }
+
+    // Web directory picker fallback
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      try {
+        const newHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+        if (newHandle) {
+          target.needsPermission = false;
+          await this.registry.saveProject(target, newHandle);
+          await this.setActiveProject(target.id, newHandle);
+          return true;
+        }
+      } catch (err: any) {
+        logger.debug('app', 'User cancelled folder picker in requestPermission', err?.message);
+      }
+    }
+
     return false;
   }
 

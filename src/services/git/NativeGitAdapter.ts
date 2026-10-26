@@ -507,7 +507,11 @@ export class NativeGitAdapter implements GitService {
       if (setUrlRes.exitCode === 0) return;
       await this.removeRemote(name).catch(() => {});
     }
-    const res = await this.exec(['remote', 'add', name, url]);
+    let res = await this.exec(['remote', 'add', name, url]);
+    if (res.exitCode !== 0 && (res.stderr.includes('not a git repository') || res.stdout.includes('not a git repository'))) {
+      await this.ensureGitInitialized();
+      res = await this.exec(['remote', 'add', name, url]);
+    }
     if (res.exitCode !== 0) {
       // If remote already exists, try set-url fallback
       const setUrlRes = await this.exec(['remote', 'set-url', name, url]);

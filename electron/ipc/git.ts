@@ -54,7 +54,11 @@ export function registerGitIpc() {
 
       return new Promise((resolve, reject) => {
         try {
-          const proc = spawn('git', args, {
+          const effectiveArgs = args.includes('safe.directory=*')
+            ? args
+            : ['-c', 'safe.directory=*', ...args];
+
+          const proc = spawn('git', effectiveArgs, {
             cwd,
             windowsHide: true,
             shell: false,
